@@ -1,149 +1,124 @@
-# app.py
 import pandas as pd
-import dash
-from dash import dcc, html, dash_table, Input, Output
+import streamlit as st
 import plotly.express as px
 
-# ---------- Load Excel ----------
-FILE = "August_2025_Truck_Trips.xlsx"  # make sure this file is in the same folder
-df = pd.read_excel(FILE)
+# ===============================
+# Streamlit App Configuration
+# ===============================
+st.set_page_config(
+    page_title="Truck Logistics Dashboard",
+    layout="wide",
+    page_icon="🚛"
+)
 
-# Ensure total weight exists (column name in your file: "Total Weight (kg)")
-if "Total Weight (kg)" not in df.columns:
-    df["Total Weight (kg)"] = df["Net Weight (kg)"] + df["Truck Weight (kg)"]
+st.markdown(
+    """
+    <style>
+        .main {
+            background-color: #1e1e2f;
+            color: #e0e0ff;
+        }
+        h1, h2, h3 {
+            color: #bb86fc !important;
+        }
+        .stDataFrame, .stTable {
+            background-color: #2b2b3d;
+            border-radius: 10px;
+        }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
 
-# ---------- Dash app ----------
-app = dash.Dash(__name__)
-server = app.server  # <-- for gunicorn / render
+# ===============================
+# Upload Excel File
+# ===============================
+st.title("🚛 Truck Logistics Dashboard - August 2025")
 
-# Colors
-BG = "#1e1e2f"
-CARD = "#2d2d3f"
-ACCENT = "#BB86FC"
-TEXT = "#FFFFFF"
+uploaded_file = st.file_uploader("📂 Upload your truck Excel file", type=["xlsx"])
 
-# Layout
-app.layout = html.Div(style={'backgroundColor': BG, 'color': TEXT, 'padding': 20}, children=[
-    html.H1("🚛 Truck Logistics Dashboard - August 2025", style={'textAlign': 'center', 'color': ACCENT}),
+if uploaded_file:
+    df = pd.read_excel(uploaded_file)
 
+    # ===============================
+    # Filters
+    # ===============================
+    with st.sidebar:
+        st.header("🔎 Filters")
+        driver_filter = st.multiselect("Driver Name", df["Driver Name"].unique())
+        product_filter = st.multiselect("Product", df["Product"].unique())
+        destination_filter = st.multiselect("Destination", df["Destination"].unique())
+
+    # Apply filters
+    filtered_df = df.copy()
+    if driver_filter:
+        filtered_df = filtered_df[filtered_df["Driver Name"].isin(driver_filter)]
+    if product_filter:
+        filtered_df = filtered_df[filtered_df["Product"].isin(product_filter)]
+    if destination_filter:
+        filtered_df = filtered_df[filtered_df["Destination"].isin(destination_filter)]
+
+    # ===============================
     # KPI Cards
-    html.Div(style={'display': 'flex', 'gap': 20, 'marginTop': 20, 'marginBottom': 20}, children=[
-        html.Div([
-            html.Div("Total Distance (km)", style={'color': ACCENT}),
-            html.H3(id='kpi-distance')
-        ], style={'backgroundColor': CARD, 'padding': 16, 'borderRadius': 10, 'flex': 1, 'textAlign': 'center'}),
+    # ===============================
+    st.subheader("📊 Key Metrics")
+    col1, col2, col3, col4 = st.columns(4)
 
-        html.Div([
-            html.Div("Total Fuel (L)", style={'color': ACCENT}),
-            html.H3(id='kpi-fuel')
-        ], style={'backgroundColor': CARD, 'padding': 16, 'borderRadius': 10, 'flex': 1, 'textAlign': 'center'}),
+    with col1:
+        st.metric("Total Distance (km)", f"{filtered_df['Distance (km)'].sum():,.0f}")
+    with col2:
+        st.metric("Total Fuel Used (L)", f"{filtered_df['Fuel Used (liters)'].sum():,.0f}")
+    with col3:
+        st.metric("Total Net Weight (kg)", f"{filtered_df['Net Weight (kg)'].sum():,.0f}")
+    with col4:
+        st.metric("Total Trips", f"{len(filtered_df)}")
 
-        html.Div([
-            html.Div("Avg Efficiency (km/L)", style={'color': ACCENT}),
-            html.H3(id='kpi-eff')
-        ], style={'backgroundColor': CARD, 'padding': 16, 'borderRadius': 10, 'flex': 1, 'textAlign': 'center'}),
-    ]),
+    # ===============================
+    # Charts
+    # ===============================
+    st.subheader("📈 Analytics Charts")
 
-    # Filters row
-    html.Div(style={'display': 'flex', 'gap': 20, 'marginBottom': 10}, children=[
-        html.Div([
-            html.Label("Driver", style={'color': ACCENT}),
-            dcc.Dropdown(
-                id='driver-filter',
-                options=[{'label': d, 'value': d} for d in sorted(df['Driver Name'].unique())],
-                multi=True,
-                placeholder='Filter by driver'
-            )
-        ], style={'flex': 1}),
-
-        html.Div([
-            html.Label("Product", style={'color': ACCENT}),
-            dcc.Dropdown(
-                id='product-filter',
-                options=[{'label': p, 'value': p} for p in sorted(df['Product'].unique())],
-                multi=True,
-                placeholder='Filter by product'
-            )
-        ], style={'flex': 1}),
-
-        html.Div([
-            html.Label(" ", style={'color': ACCENT}),
-            html.Button("⬇️ Download Excel (filtered)", id='btn-download', style={'width': '100%', 'padding': '10px', 'backgroundColor': '#8E44AD', 'color': 'white', 'border': 'none', 'borderRadius': 6})
-        ], style={'width': 220})
-    ]),
-
-    # Chart
-    dcc.Graph(id='distance-chart'),
-
-    # Table
-    html.H3("📋 Trip Details", style={'color': ACCENT, 'marginTop': 20}),
-    dash_table.DataTable(
-        id='trip-table',
-        columns=[{"name": c, "id": c} for c in df.columns],
-        page_size=10,
-        style_table={'overflowX': 'auto'},
-        style_cell={'backgroundColor': CARD, 'color': TEXT, 'textAlign': 'center', 'padding': '6px'},
-        style_header={'backgroundColor': ACCENT, 'color': 'black', 'fontWeight': 'bold'},
-        style_data_conditional=[{'if': {'row_index': 'odd'}, 'backgroundColor': '#333445'}]
-    ),
-    dcc.Download(id="download-dataframe-xlsx")
-])
-
-
-# ---------- Callbacks ----------
-@app.callback(
-    [Output('distance-chart', 'figure'),
-     Output('trip-table', 'data'),
-     Output('kpi-distance', 'children'),
-     Output('kpi-fuel', 'children'),
-     Output('kpi-eff', 'children')],
-    [Input('driver-filter', 'value'),
-     Input('product-filter', 'value')]
-)
-def update_ui(selected_drivers, selected_products):
-    dff = df.copy()
-    if selected_drivers:
-        dff = dff[dff['Driver Name'].isin(selected_drivers)]
-    if selected_products:
-        dff = dff[dff['Product'].isin(selected_products)]
-
-    # Chart
-    fig = px.bar(
-        dff,
-        x="Date",
+    chart1 = px.bar(
+        filtered_df,
+        x="Driver Name",
         y="Distance (km)",
-        color="Driver Name",
-        barmode="group",
-        title="Distance per Trip",
-        template='plotly_dark'
+        color="Product",
+        title="Distance by Driver & Product",
+        text="Distance (km)"
     )
-    fig.update_layout(plot_bgcolor=BG, paper_bgcolor=BG, font_color=TEXT)
+    chart1.update_layout(plot_bgcolor="#2b2b3d", paper_bgcolor="#1e1e2f", font=dict(color="white"))
 
-    # KPIs
-    total_distance = f"{dff['Distance (km)'].sum():,.0f}"
-    total_fuel = f"{dff['Fuel Used (liters)'].sum():,.0f}"
-    avg_eff = f"{dff['Fuel Efficiency (km/l)'].mean():.2f}" if not dff.empty else "0.00"
+    chart2 = px.pie(
+        filtered_df,
+        names="Product",
+        values="Net Weight (kg)",
+        title="Weight Distribution by Product"
+    )
+    chart2.update_layout(plot_bgcolor="#2b2b3d", paper_bgcolor="#1e1e2f", font=dict(color="white"))
 
-    return fig, dff.to_dict('records'), total_distance, total_fuel, avg_eff
+    chart3 = px.line(
+        filtered_df,
+        x="Date",
+        y="Fuel Used (liters)",
+        color="Driver Name",
+        title="Fuel Consumption Over Time",
+        markers=True
+    )
+    chart3.update_layout(plot_bgcolor="#2b2b3d", paper_bgcolor="#1e1e2f", font=dict(color="white"))
 
+    colA, colB = st.columns(2)
+    with colA:
+        st.plotly_chart(chart1, use_container_width=True)
+    with colB:
+        st.plotly_chart(chart2, use_container_width=True)
 
-@app.callback(
-    Output("download-dataframe-xlsx", "data"),
-    Input("btn-download", "n_clicks"),
-    Input('driver-filter', 'value'),
-    Input('product-filter', 'value'),
-    prevent_initial_call=True,
-)
-def download_filtered(n_clicks, selected_drivers, selected_products):
-    dff = df.copy()
-    if selected_drivers:
-        dff = dff[dff['Driver Name'].isin(selected_drivers)]
-    if selected_products:
-        dff = dff[dff['Product'].isin(selected_products)]
+    st.plotly_chart(chart3, use_container_width=True)
 
-    return dcc.send_data_frame(dff.to_excel, "Filtered_Truck_Trips_August2025.xlsx", index=False)
+    # ===============================
+    # Data Table
+    # ===============================
+    st.subheader("📄 Detailed Trip Data")
+    st.dataframe(filtered_df, use_container_width=True)
 
-
-# ---------- Run (for local dev) ----------
-if __name__ == "__main__":
-    app.run(debug=True)
+else:
+    st.info("👆 Please upload your Excel file to view the dashboard.")
