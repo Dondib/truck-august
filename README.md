@@ -35,6 +35,6 @@ pip install -r requirements.txt
 
 # Start the dashboard
 streamlit run app.py
-
+https://truck-august-y7kdxggjp9plqqlivm3rwp.streamlit.app/
 
 
