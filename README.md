@@ -1,4 +1,4 @@
-# 🚛 Truck Logistics Dashboard
+#  Truck Logistics Dashboard
 
 An interactive analytics dashboard built with **Streamlit**, **Pandas**, and **Plotly**.  
 It helps track truck trips, distances, fuel usage, and product deliveries from an Excel file.
